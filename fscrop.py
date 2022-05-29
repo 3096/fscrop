@@ -1,16 +1,42 @@
 import bisect
 import os
 import sys
+from collections import namedtuple
 
 import cv2 as cv
 import keyboard as keyboard
 
 IMAGE_EXT = '.png'
 WINDOW_NAME = "fscrop"
+GUIDELINE_COLOR = (0x77, 0x77, 0x77)
+TASKBAR_RATIO = 24
 
 img, show_x, show_y, show_w, show_h, full_w, full_h = None, 0, 0, 0, 0, 0, 0
 mouse_x, mouse_y = 0, 0
 do_render = True
+
+controls = namedtuple('Controls',
+                      ['prev', 'next', 'save', 'quit',
+                       'rule_of_thirds', 'v_center', 'h_center', 'taskbar', 'hide_lines'])
+controls.prev = (30, 'left')
+controls.next = (32, 'right')
+controls.save = (31, 'enter')
+controls.quit = (27, 'esc')
+controls.rule_of_thirds = 33
+controls.v_center = 34
+controls.h_center = 35
+controls.taskbar = 20
+controls.hide_lines = 18
+
+guideline_controls = (
+    controls.rule_of_thirds,
+    controls.v_center,
+    controls.h_center,
+    controls.taskbar
+)
+
+guide_lines_enabled = {control: False for control in guideline_controls}
+hide_all_guidelines = False
 
 dir_path = os.path.dirname(sys.argv[1])
 images = sorted(filter(
@@ -63,9 +89,24 @@ def handle_mouse_event(event, x, y, flags, _):
     do_render = True
 
 
-keyboard.on_press_key('left', lambda e: set_image_index(cur_image_index - 1))
-keyboard.on_press_key('right', lambda e: set_image_index(cur_image_index + 1))
-keyboard.on_press_key('enter', lambda e: save_image(sys.argv[2]))
+def toggle_guidelines(scan_code):
+    global do_render, hide_all_guidelines
+    guide_lines_enabled[scan_code] = not guide_lines_enabled[scan_code]
+    hide_all_guidelines = False
+    do_render = True
+
+
+def toggle_hide_lines():
+    global do_render, hide_all_guidelines
+    hide_all_guidelines = not hide_all_guidelines
+    do_render = True
+
+
+keyboard.on_press_key(controls.prev, lambda e: set_image_index(cur_image_index - 1))
+keyboard.on_press_key(controls.next, lambda e: set_image_index(cur_image_index + 1))
+keyboard.on_press_key(controls.save, lambda e: save_image(sys.argv[2]))
+keyboard.on_press_key(guideline_controls, lambda e: toggle_guidelines(e.scan_code))
+keyboard.on_press_key(controls.hide_lines, lambda e: toggle_hide_lines())
 
 cv.namedWindow(WINDOW_NAME, cv.WINDOW_NORMAL)
 cv.setWindowProperty(WINDOW_NAME, cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
@@ -75,8 +116,34 @@ load_image()
 
 while True:
     if do_render:
-        cv.imshow(WINDOW_NAME, img[show_y:show_y + show_h, show_x:show_x + show_w])
+        render_img = img[show_y:show_y + show_h, show_x:show_x + show_w].copy()
+
+        if not hide_all_guidelines:
+            if guide_lines_enabled[controls.rule_of_thirds]:
+                line_cord = show_h // 3
+                cv.line(render_img, (0, line_cord), (show_w, line_cord), GUIDELINE_COLOR, 3)
+                line_cord *= 2
+                cv.line(render_img, (0, line_cord), (show_w, line_cord), GUIDELINE_COLOR, 3)
+                line_cord = show_w // 3
+                cv.line(render_img, (line_cord, 0), (line_cord, show_h), GUIDELINE_COLOR, 3)
+                line_cord *= 2
+                cv.line(render_img, (line_cord, 0), (line_cord, show_h), GUIDELINE_COLOR, 3)
+
+            if guide_lines_enabled[controls.v_center]:
+                line_cord = show_w // 2
+                cv.line(render_img, (line_cord, 0), (line_cord, show_h), GUIDELINE_COLOR, 3)
+
+            if guide_lines_enabled[controls.h_center]:
+                line_cord = show_h // 2
+                cv.line(render_img, (0, line_cord), (show_w, line_cord), GUIDELINE_COLOR, 3)
+
+            if guide_lines_enabled[controls.taskbar]:
+                line_cord = show_h * (TASKBAR_RATIO - 1) // TASKBAR_RATIO
+                cv.line(render_img, (0, line_cord), (show_w, line_cord), GUIDELINE_COLOR, 3)
+
+        cv.imshow(WINDOW_NAME, render_img)
         do_render = False
+
     key = cv.waitKey(1)
-    if key == 27:
+    if key == controls.quit[0]:
         break
