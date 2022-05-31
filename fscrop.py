@@ -6,10 +6,16 @@ from collections import namedtuple
 import cv2 as cv
 import keyboard as keyboard
 
+if os.name == 'nt':
+    from win32gui import GetWindowText, GetForegroundWindow
+
 IMAGE_EXT = '.png'
 WINDOW_NAME = "fscrop"
 GUIDELINE_COLOR = (0x77, 0x77, 0x77)
 TASKBAR_RATIO = 24
+
+in_path = sys.argv[1]
+out_dir = sys.argv[2]
 
 img, show_x, show_y, show_w, show_h, full_w, full_h = None, 0, 0, 0, 0, 0, 0
 mouse_x, mouse_y = 0, 0
@@ -38,12 +44,12 @@ guideline_controls = (
 guide_lines_enabled = {control: False for control in guideline_controls}
 hide_all_guidelines = False
 
-dir_path = os.path.dirname(sys.argv[1])
+dir_path = os.path.dirname(in_path)
 images = sorted(filter(
     lambda file: os.path.isfile(file) and file.endswith(IMAGE_EXT),
     [os.path.join(dir_path, dir_ent) for dir_ent in os.listdir(dir_path)]
 ))
-cur_image_index = bisect.bisect_left(images, sys.argv[1])
+cur_image_index = bisect.bisect_left(images, in_path)
 
 
 def load_image():
@@ -58,8 +64,15 @@ def save_image(path):
                img[show_y:show_y + show_h, show_x:show_x + show_w])
 
 
+def is_focused():
+    if os.name == 'nt':
+        return GetWindowText(GetForegroundWindow()) == WINDOW_NAME
+
+
 def set_image_index(image_index):
     global cur_image_index, do_render
+    if not is_focused():
+        return
     if image_index < 0 or image_index >= len(images):
         return
     cur_image_index = image_index
@@ -69,6 +82,8 @@ def set_image_index(image_index):
 
 def handle_mouse_event(event, x, y, flags, _):
     global mouse_x, mouse_y, show_x, show_y, show_w, show_h, do_render
+    if not is_focused():
+        return
 
     if event == cv.EVENT_LBUTTONDOWN or event == cv.EVENT_RBUTTONDOWN:
         mouse_x, mouse_y = x, y
@@ -91,6 +106,8 @@ def handle_mouse_event(event, x, y, flags, _):
 
 def toggle_guidelines(scan_code):
     global do_render, hide_all_guidelines
+    if not is_focused():
+        return
     guide_lines_enabled[scan_code] = not guide_lines_enabled[scan_code]
     hide_all_guidelines = False
     do_render = True
@@ -98,13 +115,15 @@ def toggle_guidelines(scan_code):
 
 def toggle_hide_lines():
     global do_render, hide_all_guidelines
+    if not is_focused():
+        return
     hide_all_guidelines = not hide_all_guidelines
     do_render = True
 
 
 keyboard.on_press_key(controls.prev, lambda e: set_image_index(cur_image_index - 1))
 keyboard.on_press_key(controls.next, lambda e: set_image_index(cur_image_index + 1))
-keyboard.on_press_key(controls.save, lambda e: save_image(sys.argv[2]))
+keyboard.on_press_key(controls.save, lambda e: save_image(out_dir))
 keyboard.on_press_key(guideline_controls, lambda e: toggle_guidelines(e.scan_code))
 keyboard.on_press_key(controls.hide_lines, lambda e: toggle_hide_lines())
 
