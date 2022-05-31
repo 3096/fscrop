@@ -17,10 +17,6 @@ TASKBAR_RATIO = 24
 in_path = sys.argv[1]
 out_dir = sys.argv[2]
 
-img, show_x, show_y, show_w, show_h, full_w, full_h = None, 0, 0, 0, 0, 0, 0
-mouse_x, mouse_y = 0, 0
-do_render = True
-
 controls = namedtuple('Controls',
                       ['prev', 'next', 'save', 'quit',
                        'rule_of_thirds', 'v_center', 'h_center', 'taskbar', 'hide_lines'])
@@ -40,6 +36,14 @@ guideline_controls = (
     controls.h_center,
     controls.taskbar
 )
+
+presets = [
+    # (899, 0, 5523, 2312)
+]
+
+img, show_x, show_y, show_w, show_h, full_w, full_h = None, 0, 0, 0, 0, 0, 0
+mouse_x, mouse_y = 0, 0
+do_render = True
 
 guide_lines_enabled = {control: False for control in guideline_controls}
 hide_all_guidelines = False
@@ -96,7 +100,7 @@ def handle_mouse_event(event, x, y, flags, _):
     elif flags & cv.EVENT_FLAG_RBUTTON:
         zoom = mouse_x - x
         show_w = min(max(1, show_w + zoom), full_w - show_x)
-        show_h = show_w * full_h // full_w
+        show_h = round(show_w * full_h / full_w)
     else:
         return
 
@@ -121,11 +125,24 @@ def toggle_hide_lines():
     do_render = True
 
 
+def use_preset(preset_index):
+    global do_render, show_x, show_y, show_w, show_h
+    if not is_focused():
+        return
+    show_x, show_y, show_w, show_h = presets[preset_index]
+    do_render = True
+
+
 keyboard.on_press_key(controls.prev, lambda e: set_image_index(cur_image_index - 1))
 keyboard.on_press_key(controls.next, lambda e: set_image_index(cur_image_index + 1))
 keyboard.on_press_key(controls.save, lambda e: save_image(out_dir))
 keyboard.on_press_key(guideline_controls, lambda e: toggle_guidelines(e.scan_code))
 keyboard.on_press_key(controls.hide_lines, lambda e: toggle_hide_lines())
+for i, preset in enumerate(presets):
+    if i > 10:
+        break
+    print(i + 49)
+    keyboard.on_press_key(str((i + 1) % 10), lambda e: use_preset(i))
 
 cv.namedWindow(WINDOW_NAME, cv.WINDOW_NORMAL)
 cv.setWindowProperty(WINDOW_NAME, cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
